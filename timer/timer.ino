@@ -252,8 +252,8 @@ void updateDisplay() {
         display.setCursor(1, 1);
         if (String(receivedChars[0]) == "C") {
           display.print("C");
-        } else if (String(receivedChars[0]) == "V") {
-          display.print("S");
+        } else if (String(receivedChars[0]) == "+") { // change to "V" for V1 Gicar
+          display.print("+"); // change to "S" for V1 Gicar
         } else {
           display.print("X");
         }
