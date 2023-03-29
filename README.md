@@ -1,6 +1,12 @@
-# marax_timer
+# marax_timer with shot counter and water refill notification
 
-***This repository is a rewrite of [espresso_timer](https://github.com/alexrus/espresso_timer) that has better documentation and is easier to use.***
+***This repository is a fork of alexrus' [marax_timer](https://github.com/alexrus/marax_timer) with some additional tweaks, it is still in testing and could have lots of bugs. Use at your own risk***
+
+Additional tweaks:
+- Counts the number of shots pulled. Shots above 15 seconds are counted. (currently not working perfectly yet)
+- After pulling the 9th shot, a "refill water!" notification will appear and shot count will reset.
+- Shot count data is saved into EEPROM
+- Display an image on standby mode
 
 This project was designed to be used with a Lelit MaraX espresso machine (like the Lelit Mara PL62X), but it works (only the timer functionality) with any espresso machine that has a vibration pump.
 
