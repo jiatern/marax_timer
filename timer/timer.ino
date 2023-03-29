@@ -83,7 +83,7 @@ char endMarker = '\n';
 char rc;
 
 void setup() {
-  delay(2000) 	// add 2 seconds delay to press flash button to reset shot count
+  delay(2000); 	// add 2 seconds delay to press flash button to reset shot count
   WiFi.mode(WIFI_OFF);
 
   pinMode(0, INPUT_PULLUP);
@@ -102,11 +102,12 @@ void setup() {
   }
   delay(1280); // add some delays to allow buttons to depress
   if (flashPressed == true) {	// reset shotCount to zero and write to EEPROM
-    shotCount = 0;
-    savedshotCount = shotCount;
-    EEPROM.put(eepromAddr, savedshotCount);
+	shotCount = 0;
+	savedshotCount = shotCount;
+	EEPROM.begin(EEPROM_SIZE);
+	EEPROM.put(eepromAddr, savedshotCount);
 	EEPROM.commit();
-    flashPressed = false;
+	flashPressed = false;
   }
   
   pinMode(PUMP_PIN, INPUT_PULLUP);
@@ -179,6 +180,20 @@ void detectChanges() {
       timerDisplayOffMillis = millis();
       display.invertDisplay(false);
       Serial.println("Stop pump");
+	  delay(200);
+	  if (timerCount > 15) {
+		  shotCount++;
+		  if (shotCount == 9) {
+			savedshotCount = 0;
+			shotCount = 0;
+		  } else {
+			savedshotCount = shotCount;
+		  }
+		  EEPROM.begin(EEPROM_SIZE);
+		  EEPROM.put(eepromAddr, savedshotCount);
+		  EEPROM.commit();
+		  EEPROM.end();
+	   }
     }
   } else {
     timerStopMillis = 0;
@@ -198,14 +213,6 @@ String getTimer() {
     timerCount = (millis() - timerStartMillis ) / 1000;
     if (timerCount > 15) {
       prevTimerCount = timerCount;
-      shotCount++;
-      if (shotCount == 9) {
-        savedshotCount = 0;
-      } else {
-          savedshotCount = shotCount;
-        }
-	    EEPROM.put(eepromAddr, savedshotCount);
-	    EEPROM.commit();
     }
   } else {
     timerCount = prevTimerCount;
