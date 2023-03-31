@@ -17,10 +17,13 @@ Adafruit_SSD1306 display(128, 64, &Wire, -1);
 SoftwareSerial mySerial(D5, D6);
 Timer t;
 
+// Wi-Fi SSID credentials
+const char* ssid = "SSID"; //type your ssid
+const char* password = "PASSWORD"; //type your password
+
 // set to true/false when using another type of reed sensor
 bool reedOpenSensor = true;
 bool displayOn = true;
-bool flashPressed = false; // flash button pressed status is false at boot
 int timerCount = 0;
 int prevTimerCount = 0;
 bool timerStarted = false;
@@ -32,7 +35,6 @@ int pumpInValue = 0;
 int eepromAddr = 0; // starting address of EEPROM
 int shotCount; // declare shotCount
 int savedshotCount; // declare shotCount to be written into EEPROM
-// 'displayed image', 73x64px
 const unsigned char suimidfing [] PROGMEM = {
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
 	0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 
@@ -81,34 +83,18 @@ char receivedChars[numChars];
 static byte ndx = 0;
 char endMarker = '\n';
 char rc;
+WiFiServer server(80);
 
 void setup() {
-  delay(2000); 	// add 2 seconds delay to press flash button to reset shot count
-  WiFi.mode(WIFI_OFF);
-
-  pinMode(0, INPUT_PULLUP);
   Serial.begin(9600);
   mySerial.begin(9600);
+
   EEPROM.begin(EEPROM_SIZE); 		// start EEPROM
   
   EEPROM.get(eepromAddr, shotCount);	// read shotCount data from EEPROM
   Serial.print("Current Shout Count = ");
   Serial.println(shotCount);
   EEPROM.end();
-  
-  if (digitalRead(0) == LOW) {	// detect flash button pressing
-  Serial.println("Flash button is pressed!");
-  flashPressed = true;
-  }
-  delay(1280); // add some delays to allow buttons to depress
-  if (flashPressed == true) {	// reset shotCount to zero and write to EEPROM
-	shotCount = 0;
-	savedshotCount = shotCount;
-	EEPROM.begin(EEPROM_SIZE);
-	EEPROM.put(eepromAddr, savedshotCount);
-	EEPROM.commit();
-	flashPressed = false;
-  }
   
   pinMode(PUMP_PIN, INPUT_PULLUP);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -123,12 +109,34 @@ void setup() {
   display.setTextColor(WHITE);
   display.display();
   mySerial.write(0x11);
+
+  // Connect to Wifi
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.persistent(false);
+  WiFi.setPhyMode(WIFI_PHY_MODE_11G); // some routers need this to prevent DHCP issues
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+  delay(500);
+  Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi connected");
+  server.begin();
+  Serial.println("Server started");
+
+  // Print the IP address
+  Serial.print("Use this URL to connect: ");
+  Serial.print("http://");
+  Serial.print(WiFi.localIP());
+  Serial.println("/");
 }
 
 void loop() {
   t.update();
   detectChanges();
   getMachineInput();
+  wifiAdmin();
 }
 
 void getMachineInput() {
@@ -152,7 +160,7 @@ void getMachineInput() {
   if (millis() - serialUpdateMillis > 5000) {
     serialUpdateMillis = millis();
     memset(receivedChars, 0, numChars);
-    Serial.println("Request serial update");
+    // Serial.println("Request serial update"); 
     mySerial.write(0x11);
   }
 }
@@ -180,15 +188,15 @@ void detectChanges() {
       timerDisplayOffMillis = millis();
       display.invertDisplay(false);
       Serial.println("Stop pump");
-	  delay(200);
-	  if (timerCount > 15) {
-		  shotCount++;
-		  if (shotCount == 9) {
-			savedshotCount = 0;
-			shotCount = 0;
-		  } else {
-			savedshotCount = shotCount;
-		  }
+	    delay(200);
+	    if (timerCount > 15) {
+		    shotCount++;
+		    if (shotCount == 9) {
+			  savedshotCount = 0;
+			  shotCount = 0;
+		    } else {
+			    savedshotCount = shotCount;
+		    }
 		  EEPROM.begin(EEPROM_SIZE);
 		  EEPROM.put(eepromAddr, savedshotCount);
 		  EEPROM.commit();
@@ -236,7 +244,7 @@ void updateDisplay() {
       display.drawLine(74, 0, 74, 63, SSD1306_WHITE);
       // draw time seconds
       display.setTextSize(4);
-      display.setCursor(display.width() / 2 - 1 + 17, 20);
+      display.setCursor(display.width() / 2 - 1 + 17, 24);
       display.print(getTimer());
 	  if (shotCount == 9) {			// display shotCount & refill water warning
           display.setTextSize(1);
@@ -265,8 +273,8 @@ void updateDisplay() {
           display.print("X");
         }
       } else {
-		  display.drawBitmap(0, 0, suimidfing, 73, 64, SSD1306_WHITE);
-		}
+		    display.drawBitmap(0, 0, suimidfing, 73, 64, SSD1306_WHITE);
+		  }
       if (String(receivedChars).substring(18, 22) == "0000") {
         // not in boost heating mode
         // draw fill circle if heating on
@@ -317,4 +325,53 @@ void updateDisplay() {
     }
   }
   display.display();
+}
+
+void wifiAdmin() {
+  WiFiClient client = server.available();
+  if (!client) {
+    return;
+  }
+
+  // Read the first line of the request
+  String request = client.readStringUntil('\r');
+  Serial.println(request);
+  client.flush();
+
+  // Run actions if option is clicked
+  if (request.indexOf("/RESET") != -1) {
+  shotCount = 0;
+	savedshotCount = 0;
+  } 
+  if (request.indexOf("/ADD") != -1){
+  shotCount++;
+  savedshotCount = shotCount;
+  }
+  if (request.indexOf("/WRITE") != -1){
+  EEPROM.begin(EEPROM_SIZE);
+	EEPROM.put(eepromAddr, savedshotCount);
+	EEPROM.commit();
+  } 
+  
+  //Build HTML
+  client.println("HTTP/1.1 200 OK");
+  client.println("Content-Type: text/html");
+  client.println(""); //  do not forget this one
+  client.println("<!DOCTYPE HTML>");
+  client.println("<html>");
+  client.println("<style>");
+  client.println("* {");
+  client.println("font-size: 22px;");
+  client.println("font-family: Helvetica !important;");
+  client.println("text-align: center;");
+  client.println("}");
+  client.println("</style>");
+  client.print("MaraX Shot Counter");
+  client.print("<p style=\"font-size:34px !important\">Shot Count is now: ");
+  client.print(shotCount);
+  client.print("</p>");
+  client.println("Click <a href=\"/RESET\">here</a> to reset the Shot Count to 0.<br>");
+  client.println("Click <a href=\"/ADD\">here</a> to add Shot Count by 1.<br><br>");
+  client.println("Click <a href=\"/WRITE\">here</a> to confirm writing to EEPROM.<br>");
+  client.println("</html>");
 }
