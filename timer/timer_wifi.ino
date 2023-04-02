@@ -24,6 +24,7 @@ const char* password = "PASSWORD"; //type your password
 // set to true/false when using another type of reed sensor
 bool reedOpenSensor = true;
 bool displayOn = true;
+bool refillWarning = false;
 int timerCount = 0;
 int prevTimerCount = 0;
 bool timerStarted = false;
@@ -34,7 +35,6 @@ long serialUpdateMillis = 0;
 int pumpInValue = 0;
 int eepromAddr = 0; // starting address of EEPROM
 int shotCount; // declare shotCount
-int savedshotCount; // declare shotCount to be written into EEPROM
 const unsigned char suimidfing [] PROGMEM = {
 	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 
 	0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80, 0xff, 0xff, 
@@ -192,13 +192,11 @@ void detectChanges() {
 	    if (timerCount > 15) {
 		    shotCount++;
 		    if (shotCount == 9) {
-			  savedshotCount = 0;
 			  shotCount = 0;
-		    } else {
-			    savedshotCount = shotCount;
-		    }
+        refillWarning = true;
+        }
 		  EEPROM.begin(EEPROM_SIZE);
-		  EEPROM.put(eepromAddr, savedshotCount);
+		  EEPROM.put(eepromAddr, shotCount);
 		  EEPROM.commit();
 		  EEPROM.end();
 	   }
@@ -246,7 +244,7 @@ void updateDisplay() {
       display.setTextSize(4);
       display.setCursor(display.width() / 2 - 1 + 17, 24);
       display.print(getTimer());
-	  if (shotCount == 9) {			// display shotCount & refill water warning
+	  if (refillWarning) {			// display shotCount & refill water warning
           display.setTextSize(1);
           display.setCursor(86,1);
           display.print("Refill");
@@ -341,15 +339,13 @@ void wifiAdmin() {
   // Run actions if option is clicked
   if (request.indexOf("/RESET") != -1) {
   shotCount = 0;
-	savedshotCount = 0;
   } 
   if (request.indexOf("/ADD") != -1){
   shotCount++;
-  savedshotCount = shotCount;
   }
   if (request.indexOf("/WRITE") != -1){
   EEPROM.begin(EEPROM_SIZE);
-	EEPROM.put(eepromAddr, savedshotCount);
+	EEPROM.put(eepromAddr, shotCount);
 	EEPROM.commit();
   } 
   
@@ -366,7 +362,17 @@ void wifiAdmin() {
   client.println("text-align: center;");
   client.println("}");
   client.println("</style>");
-  client.print("MaraX Shot Counter");
+  client.println("MaraX Monitor<br><br>");
+  client.println("HX Temperature: ");
+  client.print(receivedChars[14]);
+  client.print(receivedChars[15]);
+  client.print(receivedChars[16]);
+  client.print(" C<br>");
+  client.println("Steam Temperature: ");
+  client.print(receivedChars[6]);
+  client.print(receivedChars[7]);
+  client.print(receivedChars[8]);
+  client.print(" C<br>");
   client.print("<p style=\"font-size:34px !important\">Shot Count is now: ");
   client.print(shotCount);
   client.print("</p>");
